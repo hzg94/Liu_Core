@@ -3,7 +3,7 @@ import './style.css'
 import App from './App.vue'
 import PrimeVue from "primevue/config";
 import Noir from "./theme/Noir.ts";
-
+import 'tailwindcss/tailwind.css';
 const app = createApp(App)
 
 app.use(PrimeVue,{
