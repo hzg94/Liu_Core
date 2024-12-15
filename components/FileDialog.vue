@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
-import ColumnGroup from 'primevue/columngroup';   // optional
-import Row from 'primevue/row';                   // optional
-import Select from 'primevue/select';
 import InputGroup from 'primevue/inputgroup';
 import InputGroupAddon from 'primevue/inputgroupaddon';
 import {InputText} from "primevue";
@@ -11,18 +8,15 @@ import {ref} from "vue";
 import {Breadcrumb} from "primevue";
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
-
 import {invoke} from "@tauri-apps/api/core";
-const tmpFileName = ref({index:-1,name:""})
 const dialogVisible = ref(false)
 const result = ref({path: "", name: ""})
 const path = ref({current_path: "None", files: [{path: "", created: 0, name: "", len: 0}]});
-
-
-// 菜单
-const menus = ref([]);
+const cm = ref();
+const selectedProduct = ref();
 const rename = ref(false)
 const search = ref("None")
+
 var props = defineProps({
   select: String,
 });
@@ -36,13 +30,13 @@ async function queryPath() {
 }
 
 const result_path = defineModel();
-const select_row = (row) => {
+const select_row = (row:any) => {
 
   if(row.len>0){
     if(select.value==='file') {
       result.value.name=row.name
       result.value.path=row.path
-    }else if(select!=='dir'){
+    }else if(select.value!=='dir'){
       for (let fileType of select.value.toString().split(';')) {
         if(row.name.endsWith(fileType)){
           result.value.name=row.name
@@ -61,29 +55,35 @@ const select_row = (row) => {
   queryPath()
 
 }
-const handleClose = (done) => {
+const menuModel = ref([
+  {label: 'View', icon: 'pi pi-fw pi-search', command: () => {console.log(selectedProduct.value.name)}},
+  {label: 'Delete', icon: 'pi pi-fw pi-times', command: () => {console.log(selectedProduct.value.name)}}
+]);
+const handleClose = (done:any) => {
   done()
   path.value.current_path = "None";
-  result.value = {};
+  result.value = {path: "", name: ""};
 }
-const clickResult=(id)=>{
+const clickResult=(id:string)=>{
   setTimeout(()=>{
-    document.getElementById(id).click()
-  },50)
-}
-const openRename = () => {
-  console.log("?")
-  setTimeout(()=>{
-    rename.value = true
+    (document.getElementById(id) as HTMLElement).click()
   },50)
 }
 const breadcrumbItems=()=>{
   let tmp=[]
   for (let string of path.value.current_path.toString().split('\\')) {
-    tmp.push(
-    {
-      label:string,command:(a)=>{
-        console.log(a,string);
+    tmp.push({
+      label:string,
+      command:()=>{
+        let tmp_srt = ""
+        let split = path.value.current_path.toString().split('\\');
+        for (let i = 0; i < split.length-1; i++) {
+          tmp_srt=tmp_srt+"\\"+split[i]
+          if (string===split[i]){
+            path.value.current_path=tmp_srt.slice(1)
+            queryPath()
+          }
+        }
       }
     });
   }
@@ -96,6 +96,9 @@ const cities = ref([
   { name: 'Istanbul', code: 'IST' },
   { name: 'Paris', code: 'PRS' }
 ]);
+const onRowContextMenu = (event:any) => {
+  cm.value.show(event.originalEvent);
+};
 </script>
 
 <template>
@@ -111,48 +114,54 @@ const cities = ref([
       :style="{width:'40rem'}"
       :before-close="handleClose"
   >
-    <template #container="{ closeCallback }">
+    <template #container>
     <div class="p-10">
-      <div @click="()=>{
-        search='';
-        clickResult('search')
+      <div style="cursor: text;">
+          <InputGroup>
+            <InputGroupAddon class="!bg-stone-100">
+                <i class="pl-2 pi pi-angle-left cursor-pointer text-blue-500"/>
+                <i class="pl-2 pr-2 pi pi-angle-right cursor-pointer "/>
+            </InputGroupAddon>
 
-      }" @mouseout="()=>{
-        search='None'
-      }" style="cursor: text;">
-        <InputGroup>
-          <InputGroupAddon>
-            <i class="pi pi-map"></i>
-          </InputGroupAddon>
-          <Select v-model="search" editable :options="cities" optionLabel="name"  />
-        </InputGroup>
-      </div>
-    <div class="h-80" style="overflow: auto">
-      <DataTable  table-style="width: 100%" :value="path.files">
-        <!--      <template #header>-->
-        <!--        <div class="flex flex-wrap items-center justify-between gap-2">-->
-        <!--          <span class="text-xl font-bold">Products</span>-->
-        <!--          <Button icon="pi pi-refresh" rounded raised />-->
-        <!--        </div>-->
-        <!--      </template>-->
-        <Column  >
-          <template #body="scope">
-            <div @click="select_row(scope.data)">
-              <template v-if="scope.data.len===0">
-                <i class="pi pi-folder"></i>
+              <template v-if="search==='None'">
+                <InputGroupAddon>
+                  <div class="w-screen">
+                    <Breadcrumb id="breadcrumb" style="padding:0" :model="breadcrumbItems() " >
+                      <template #separator>\</template>
+                    </Breadcrumb>
+                  </div>
+                </InputGroupAddon>
               </template>
               <template v-else>
-                <i class="pi pi-file"></i>
+                  <Select v-model="search" editable :options="cities" optionLabel="name"  />
+              </template>
+          </InputGroup>
+
+      </div>
+      <div class="h-2"/>
+    <ContextMenu ref="cm" :model="menuModel" @hide="selectedProduct = null" />
+    <div class=" h-80 overflow-auto " >
+      <DataTable  table-style="width: 100%" contextMenu
+                  v-model:contextMenuSelection="selectedProduct"
+                  @rowContextmenu="onRowContextMenu"
+                  :value="path.files">
+        <Column  :pt="{headerCell:{class:'!p-0'}}" body-class="!p-0" body-style="width:10px">
+          <template #body="scope">
+            <div   @click="select_row(scope.data)">
+              <template v-if="scope.data.len===0">
+                <i class="pi pi-folder block pl-4"></i>
+              </template>
+              <template v-else>
+                <i class="pi pi-file block pl-4"></i>
               </template>
             </div>
           </template>
         </Column>
-        <Column >
+        <Column :pt="{headerCell:{class:'!p-0'}}" body-class="p-0!" >
           <template #body="scope">
             <div @click="select_row(scope.data)"
                  style="cursor: pointer;">
               <template v-if="result.name===scope.data.name && rename">
-                <el-input size="small" v-model="result.name"></el-input>
               </template>
               <template v-else>
                 {{scope.data.name}}
@@ -160,42 +169,44 @@ const cities = ref([
             </div>
           </template>
         </Column>
-        <Column width="100" >
-
+        <Column :pt="{headerCell:{class:'!p-0'}}" body-class="w-24 !text-right">
           <template #body="scope">
             <div @click="select_row(scope)">
               {{
-                scope.data.len === 0 ? "" : scope.data.len / 1024 < 1 ? 1 + " KB" : parseInt(scope.data.len / 1024) + 1 + " KB"
+                scope.data.len === 0 ? "" : scope.data.len / 1024 < 1 ? (1).toString() + " KB" : (parseInt((scope.data.len / 1024).toString()) + 1 ).toString()+ " KB"
               }}
             </div>
           </template>
-          <Column width="230" >
-            <template #body="scope">
-              <div @click="select_row(scope.data)">
-                {{ new Date(scope.data).toLocaleString() }}
-              </div>
-            </template>
-          </Column>
         </Column>
-
+        <Column :pt="{headerCell:{class:'!p-0'}}" body-class="w-44 !text-right !p-0" >
+          <template #body="scope">
+            <div @click="select_row(scope)">
+              {{ new Date(scope.data.created).toLocaleString() }}
+            </div>
+          </template>
+        </Column>
       </DataTable>
     </div>
 
 
-    <div style="padding-top:20px;">
+    <div class="pt-5 h-10">
       <InputGroup >
-        <InputGroupAddon>
-          <template v-if="select!=='dir'">
-            <i class="pi pi-file"></i>
-          </template>
-          <template v-else>
-            <i class="pi pi-folder"></i>
-          </template>
-        </InputGroupAddon>
-        <InputText v-model="result.name" placeholder="Price" />
-        <InputGroupAddon>
-
-          <Select v-model="search" :options="cities" optionLabel="name" placeholder="Select a City" class="w-full md:w-56" />
+        <InputGroupAddon class="!bg-stone-100">
+          <div class="pr-2 pl-2.5 ">
+            <template v-if="select!=='dir'">
+              <i class="pi pi-file"></i>
+            </template>
+            <template v-else>
+              <i class="pi pi-folder"></i>
+            </template>
+          </div>
+        </InputGroupAddon >
+        <InputText v-model="result.name"  />
+        <InputGroupAddon class="!bg-stone-100">
+          <div class="w-24 text-center  ">
+             {{select}}
+          </div>
+<!--          <Select v-model="search" :options="cities" optionLabel="name" placeholder="Select a City" class="w-full md:w-56" />-->
 <!--          <el-select v-model="select" @change="()=>{-->
 <!--              result={path:'',name:''}-->
 <!--            }" placeholder="Select" style="width: 115px">-->
@@ -210,19 +221,22 @@ const cities = ref([
     </div>
 
 
-      <div class="dialog-footer">
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="()=>{
+    </div>
+      <div class="pl-96">
+        <Button size="small" @click="()=>{
+          dialogVisible = false
+          // closeCallback()
+        } ">取消</Button>
+
+        <Button size="small" type="primary" @click="()=>{
             dialogVisible = false
             result_path=result.path
           }">确认
-        </el-button>
+        </Button>
       </div>
-    </div>
     </template>
   </Dialog>
 </template>
 
 <style scoped>
-
 </style>
